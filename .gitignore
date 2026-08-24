@@ -4,3 +4,4 @@ out/*.mp4
 *.wav
 voices/*.onnx
 voices/*.onnx.json
+.claude/

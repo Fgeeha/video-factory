@@ -10,12 +10,15 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 import yaml
+
+import comfy_client
 
 WIDTH, HEIGHT, FPS = 1080, 1920, 30
 
@@ -74,6 +77,40 @@ def render_image_segment(image: Path, duration: float, out_mp4: Path) -> None:
         "-t", str(duration), "-r", str(FPS),
         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_mp4),
     ])
+
+
+def normalize_segment(src: Path, out_mp4: Path) -> None:
+    """Re-encode a generated video clip (e.g. Wan2.2's 480x832@16fps) to the standard canvas."""
+    run([
+        "ffmpeg", "-y", "-i", str(src),
+        "-vf", f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,crop={WIDTH}:{HEIGHT},fps={FPS}",
+        "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_mp4),
+    ])
+
+
+def resolve_images(entries: list[dict], base: Path, tmp_dir: Path, comfy_url: str) -> list[dict]:
+    """Turn each `images:` entry into {"kind": "photo"|"video", "path": Path, "duration": float|None}.
+
+    "duration" is None for photos without an explicit duration (split evenly later),
+    and always set for generated videos (their length is fixed by generation).
+    """
+    items = []
+    for i, entry in enumerate(entries):
+        if "file" in entry:
+            items.append({"kind": "photo", "path": base / entry["file"], "duration": entry.get("duration")})
+        elif "generate_image" in entry:
+            spec = entry["generate_image"]
+            path = tmp_dir / f"gen_img_{i:03d}.png"
+            comfy_client.generate_image(spec["prompt"], path, comfy_url=comfy_url)
+            items.append({"kind": "photo", "path": path, "duration": entry.get("duration")})
+        elif "generate_video" in entry:
+            spec = entry["generate_video"]
+            path = tmp_dir / f"gen_vid_{i:03d}.mp4"
+            comfy_client.generate_video(spec["prompt"], path, length=spec.get("length", 33), comfy_url=comfy_url)
+            items.append({"kind": "video", "path": path, "duration": ffprobe_duration(path)})
+        else:
+            raise ValueError(f"images[{i}] needs one of: file, generate_image, generate_video")
+    return items
 
 
 def concat_segments(segments: list[Path], out_mp4: Path, tmp_dir: Path) -> None:
@@ -137,6 +174,8 @@ def main() -> None:
     parser.add_argument("config", type=Path)
     parser.add_argument("--whisper-model", default="small", help="faster-whisper model size")
     parser.add_argument("--no-subtitles", action="store_true")
+    parser.add_argument("--comfy-url", default=os.environ.get("COMFYUI_URL", comfy_client.DEFAULT_URL),
+                         help="ComfyUI server for generate_image/generate_video scenes")
     args = parser.parse_args()
 
     cfg = yaml.safe_load(args.config.read_text())
@@ -152,14 +191,24 @@ def main() -> None:
         synth_voiceover(cfg["voiceover_text"], base / cfg["voice_model"], voice_wav)
         voice_duration = ffprobe_duration(voice_wav)
 
-        images = [base / img["file"] for img in cfg["images"]]
-        given = [img["duration"] for img in cfg["images"] if "duration" in img] or None
-        durations = split_durations(len(images), voice_duration, given)
+        items = resolve_images(cfg["images"], base, tmp_dir, args.comfy_url)
+
+        video_total = sum(it["duration"] for it in items if it["kind"] == "video")
+        photo_items = [it for it in items if it["kind"] == "photo"]
+        photo_durations = []
+        if photo_items:
+            given = [it["duration"] for it in photo_items if it["duration"] is not None] or None
+            photo_durations = split_durations(len(photo_items), max(voice_duration - video_total, 0.1), given)
 
         segments = []
-        for i, (image, duration) in enumerate(zip(images, durations)):
+        photo_i = 0
+        for i, it in enumerate(items):
             seg = tmp_dir / f"seg_{i:03d}.mp4"
-            render_image_segment(image, duration, seg)
+            if it["kind"] == "video":
+                normalize_segment(it["path"], seg)
+            else:
+                render_image_segment(it["path"], photo_durations[photo_i], seg)
+                photo_i += 1
             segments.append(seg)
 
         concat_video = tmp_dir / "concat.mp4"

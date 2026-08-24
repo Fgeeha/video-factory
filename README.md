@@ -4,7 +4,9 @@
 фото → Ken Burns (наплыв/зум через ffmpeg) → озвучка (piper, офлайн, CPU) →
 автосубтитры (faster-whisper, CPU) → микс с фоновой музыкой.
 
-Работает без GPU. Полностью локально.
+Базовый пайплайн работает без GPU (CPU-only). Опционально сцены можно
+генерировать нейросетями на локальной GPU (ComfyUI) вместо реальных фото —
+см. раздел ниже.
 
 ## Установка
 
@@ -31,17 +33,49 @@ uv run make_clip.py example.config.yaml
 
 Результат — `out/<имя>.mp4`.
 
-## Проверка логики без ffmpeg/piper
+## Проверка логики без ffmpeg/piper/ComfyUI
 
 ```bash
 uv run test_make_clip.py
 ```
 
+## Генерация кадров нейросетью на локальной GPU (опционально)
+
+Вместо `file:` в сцене можно сгенерировать кадр или короткое видео через
+локально запущенный ComfyUI (проверено на RTX 5070 Ti, 16GB VRAM):
+
+```yaml
+images:
+  - generate_image:
+      prompt: "certified truck service center signage, industrial garage entrance, realistic"
+  - generate_video:
+      prompt: "mechanic changing a brake pad on a heavy truck wheel, close up, realistic"
+      length: 33   # кадров при 16fps; 33 ~= 2с, 81 ~= 5с (нужно 4n+1)
+  - file: shots/03-brakes.jpg
+```
+
+Требуется:
+
+1. Запущенный ComfyUI: `cd ComfyUI && venv/bin/python main.py` (по умолчанию
+   `http://127.0.0.1:8188`, переопределяется `--comfy-url` или `COMFYUI_URL`).
+2. Модели в `ComfyUI/models/` (репаковки Comfy-Org на HuggingFace):
+   - `diffusion_models/z_image_turbo_bf16.safetensors` + `text_encoders/qwen_3_4b.safetensors` + `vae/ae.safetensors`
+   - `diffusion_models/wan2.2_t2v_{high,low}_noise_14B_fp8_scaled.safetensors` + `text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors` + `vae/wan_2.1_vae.safetensors`
+   - `loras/wan2.2_t2v_lightx2v_4steps_lora_v1.1_{high,low}_noise.safetensors` (ускоряют Wan2.2 до 4 шагов сэмплинга)
+
+Ориентировочное время на RTX 5070 Ti: картинка (Z-Image Turbo, 9 шагов) —
+~15-20с; видео 33 кадра (Wan2.2 T2V, 4 шага, MoE high/low-noise) — ~35-90с.
+Сгенерированное видео нормализуется под общий холст (1080x1920/30fps) тем же
+`ffmpeg`, что и остальные сегменты, — конкатенация не отличает AI-сегменты
+от фото.
+
 ## Что сознательно не сделано
 
-- Нет генерации видео/картинок нейросетями — на CPU это непрактично
-  (десятки минут на секунду видео). Источник кадров — реальные фото/видео.
 - Нет автопубликации в VK — собранный ролик заливается вручную
   (это позволяет прикрепить трек из официальной библиотеки VK для охвата).
 - Ken Burns только зум-ин с фиксированным шагом; добавить панораму/
   зум-аут, если понадобится разнообразие.
+- `generate_video` — только текст-в-видео (T2V). Image-to-video (анимация
+  конкретного реального фото) не реализован — добавить через `WanImageToVideo`
+  с `start_image`, если понадобится оживить существующие кадры вместо
+  генерации с нуля.

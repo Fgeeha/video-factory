@@ -1,0 +1,15 @@
+# Требует запущенный ComfyUI (cd ComfyUI && venv/bin/python main.py) с моделями
+# из README (Z-Image Turbo + Wan2.2 T2V). Сцены без реальных фото — оба кадра
+# сгенерированы нейросетью на локальной GPU.
+voice_model: voices/ru_RU-irina-medium.onnx
+voiceover_text: |
+  Меняем тормозные колодки и обслуживаем грузовики любых марок.
+
+images:
+  - generate_image:
+      prompt: "certified truck service center signage, industrial garage entrance, realistic, natural light"
+  - generate_video:
+      prompt: "truck repair workshop, mechanic changing a brake pad on a heavy truck wheel, hands working with a wrench, close up, realistic"
+      length: 33
+
+output: out/brake-promo-gpu.mp4
