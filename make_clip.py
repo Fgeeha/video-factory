@@ -106,7 +106,13 @@ def resolve_images(entries: list[dict], base: Path, tmp_dir: Path, comfy_url: st
         elif "generate_video" in entry:
             spec = entry["generate_video"]
             path = tmp_dir / f"gen_vid_{i:03d}.mp4"
-            comfy_client.generate_video(spec["prompt"], path, length=spec.get("length", 33), comfy_url=comfy_url)
+            if "image" in spec:
+                comfy_client.generate_video_from_image(
+                    base / spec["image"], spec["prompt"], path,
+                    length=spec.get("length", 33), comfy_url=comfy_url,
+                )
+            else:
+                comfy_client.generate_video(spec["prompt"], path, length=spec.get("length", 33), comfy_url=comfy_url)
             items.append({"kind": "video", "path": path, "duration": ffprobe_duration(path)})
         else:
             raise ValueError(f"images[{i}] needs one of: file, generate_image, generate_video")

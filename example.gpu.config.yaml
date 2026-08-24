@@ -1,15 +1,22 @@
 # Требует запущенный ComfyUI (cd ComfyUI && venv/bin/python main.py) с моделями
-# из README (Z-Image Turbo + Wan2.2 T2V). Сцены без реальных фото — оба кадра
-# сгенерированы нейросетью на локальной GPU.
+# из README (Z-Image Turbo + Wan2.2 T2V/I2V).
 voice_model: voices/ru_RU-irina-medium.onnx
 voiceover_text: |
   Меняем тормозные колодки и обслуживаем грузовики любых марок.
 
 images:
+  # кадр с нуля (Z-Image Turbo)
   - generate_image:
       prompt: "certified truck service center signage, industrial garage entrance, realistic, natural light"
+  # видео с нуля (Wan2.2 T2V)
   - generate_video:
       prompt: "truck repair workshop, mechanic changing a brake pad on a heavy truck wheel, hands working with a wrench, close up, realistic"
+      length: 33
+  # оживить реальное фото вместо генерации с нуля (Wan2.2 I2V) — image: путь
+  # к существующему кадру, prompt: что на нём должно происходить/двигаться
+  - generate_video:
+      image: shots/01-workshop.jpg
+      prompt: "the mechanic looks up and smiles at the camera, subtle motion"
       length: 33
 
 output: out/brake-promo-gpu.mp4

@@ -4,7 +4,7 @@
 Usage: uv run test_make_clip.py
 """
 from make_clip import build_zoompan_filter, split_durations, _srt_ts
-from comfy_client import build_zimage_workflow, build_wan_t2v_workflow
+from comfy_client import build_zimage_workflow, build_wan_t2v_workflow, build_wan_i2v_workflow
 
 
 def test_split_durations_even():
@@ -54,6 +54,17 @@ def test_wan_t2v_workflow_splits_steps_across_high_low_noise():
     assert (high["start_at_step"], high["end_at_step"]) == (0, 2)
     assert (low["start_at_step"], low["end_at_step"]) == (2, 4)
     assert high["add_noise"] == "enable" and low["add_noise"] == "disable"
+
+
+def test_wan_i2v_workflow_wires_uploaded_image_and_uses_i2v_checkpoints():
+    wf = build_wan_i2v_workflow("photo.png", "a truck", width=480, height=832, length=33, seed=7)["prompt"]
+    assert wf["11"]["inputs"]["image"] == "photo.png"
+    assert wf["12"]["inputs"]["start_image"] == ["11", 0]
+    assert "i2v" in wf["3"]["inputs"]["unet_name"]
+    assert "i2v" in wf["5"]["inputs"]["lora_name"]
+    # KSamplerAdvanced consumes WanImageToVideo's own positive/negative/latent outputs, not the raw CLIPTextEncode
+    assert wf["13"]["inputs"]["positive"] == ["12", 0]
+    assert wf["13"]["inputs"]["latent_image"] == ["12", 2]
 
 
 if __name__ == "__main__":
