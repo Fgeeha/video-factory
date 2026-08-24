@@ -1,0 +1,17 @@
+# Пример сценария клипа. Пути — относительно этого файла.
+voice_model: voices/ru_RU-irina-medium.onnx
+voiceover_text: |
+  Меняем тормозные колодки за один рубль при покупке колодок Getteile.
+  Сертифицированный сервис Sinotruk в Волгограде и Волжском.
+
+# Если не задавать duration — время озвучки делится поровну между кадрами.
+# Если задавать — указать duration нужно у КАЖДОЙ картинки (иначе ошибка).
+images:
+  - file: shots/01-workshop.jpg
+  - file: shots/02-lift.jpg
+  - file: shots/03-brakes.jpg
+
+music: assets/background.mp3
+music_volume: 0.15
+
+output: out/brake-promo.mp4
